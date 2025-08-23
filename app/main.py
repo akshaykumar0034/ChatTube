@@ -8,7 +8,7 @@ from youtube_url import extract_video_id
 from youtube_transcript import get_transcript
 from chatbot import ChatbotManager
 from config import get_google_api_key
-from youtube_video_title import get_video_title
+from youtube_video_metadata import get_video_metadata
 
 app = FastAPI(title="ChatTube API")
 
@@ -34,28 +34,67 @@ class ChatPayload(BaseModel):
 def read_root():
     return {"message": "ChatTube API is running!"}
 
+# @app.post("/api/load_video")
+# async def load_video(payload: VideoPayload):
+#     try:
+#         get_google_api_key()
+#     except ValueError as e:
+#         raise HTTPException(status_code=400, detail=str(e))
+
+#     video_id = extract_video_id(payload.video_url)
+#     if not video_id:
+#         raise HTTPException(status_code=400, detail="Invalid YouTube URL provided.")
+
+#     result = get_transcript(video_id)
+
+#     if not result["success"]:
+#         raise HTTPException(status_code=400, detail=result["error"])
+
+#     transcript = result["transcript"]
+#     title = get_video_title(video_id)
+#     session_id = str(uuid.uuid4())
+#     active_sessions[session_id] = chatbot_manager.build_chatbot_chain(transcript)
+
+#     return {"message": "Video loaded successfully.", "session_id": session_id, "title": title}
+
+from fastapi import APIRouter, HTTPException, Request
+import uuid
+
 @app.post("/api/load_video")
-async def load_video(payload: VideoPayload):
+async def load_video(request: Request):
     try:
         get_google_api_key()
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    video_id = extract_video_id(payload.video_url)
+    body = await request.json()
+    video_url = body.get("video_url")
+    video_id = extract_video_id(video_url)
+
     if not video_id:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL provided.")
 
+    # ✅ get transcript
     result = get_transcript(video_id)
-
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["error"])
 
     transcript = result["transcript"]
-    title = get_video_title(video_id)
+
+    # ✅ get video metadata (title, channel name, channel url)
+    metadata = get_video_metadata(video_id)
+
+    # ✅ session handling
     session_id = str(uuid.uuid4())
     active_sessions[session_id] = chatbot_manager.build_chatbot_chain(transcript)
 
-    return {"message": "Video loaded successfully.", "session_id": session_id, "title": title}
+    return {
+        "message": "Video loaded successfully.",
+        "session_id": session_id,
+        "title": metadata["title"],
+        "channel_name": metadata["channel_name"],
+        "channel_url": metadata["channel_url"],
+    }
 
 
 @app.post("/api/chat")
