@@ -1,20 +1,3 @@
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
-
-# def get_transcript(video_id):
-#     try:
-#         api = YouTubeTranscriptApi()
-#         transcript_list = api.fetch(video_id, languages=["en", "hi"])
-
-#         # Flatten it to plain text
-#         transcript = " ".join(chunk.text for chunk in transcript_list)
-#         return transcript
-
-#     except TranscriptsDisabled:
-#         return "No captions available for this video."
-#     except Exception as e:
-#         return f"An error occurred: {str(e)}"
-
-
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 def get_transcript(video_id: str):
