@@ -1,14 +1,15 @@
 #main.py
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uuid
-
 from youtube_url import extract_video_id
 from youtube_transcript import get_transcript
 from chatbot import ChatbotManager
 from config import get_google_api_key
 from youtube_video_metadata import get_video_metadata
+import threading, time
+from langchain_core.messages import HumanMessage, AIMessage
 
 app = FastAPI(title="ChatTube API")
 
@@ -23,6 +24,12 @@ app.add_middleware(
 
 chatbot_manager = ChatbotManager()
 active_sessions = {} 
+def cleanup_task():
+    while True:
+        chatbot_manager.cleanup_old_indexes()
+        time.sleep(3600)  # run every hour
+
+threading.Thread(target=cleanup_task, daemon=True).start()
 class VideoPayload(BaseModel):
     video_url: str
 
@@ -33,32 +40,6 @@ class ChatPayload(BaseModel):
 @app.get("/")
 def read_root():
     return {"message": "ChatTube API is running!"}
-
-# @app.post("/api/load_video")
-# async def load_video(payload: VideoPayload):
-#     try:
-#         get_google_api_key()
-#     except ValueError as e:
-#         raise HTTPException(status_code=400, detail=str(e))
-
-#     video_id = extract_video_id(payload.video_url)
-#     if not video_id:
-#         raise HTTPException(status_code=400, detail="Invalid YouTube URL provided.")
-
-#     result = get_transcript(video_id)
-
-#     if not result["success"]:
-#         raise HTTPException(status_code=400, detail=result["error"])
-
-#     transcript = result["transcript"]
-#     title = get_video_title(video_id)
-#     session_id = str(uuid.uuid4())
-#     active_sessions[session_id] = chatbot_manager.build_chatbot_chain(transcript)
-
-#     return {"message": "Video loaded successfully.", "session_id": session_id, "title": title}
-
-from fastapi import APIRouter, HTTPException, Request
-import uuid
 
 @app.post("/api/load_video")
 async def load_video(request: Request):
@@ -86,7 +67,7 @@ async def load_video(request: Request):
 
     # ✅ session handling
     session_id = str(uuid.uuid4())
-    active_sessions[session_id] = chatbot_manager.build_chatbot_chain(transcript)
+    active_sessions[session_id] = chatbot_manager.build_chatbot_chain(transcript, video_id)
 
     return {
         "message": "Video loaded successfully.",
@@ -95,6 +76,7 @@ async def load_video(request: Request):
         "channel_name": metadata["channel_name"],
         "channel_url": metadata["channel_url"],
     }
+
 
 
 @app.post("/api/chat")
@@ -109,6 +91,15 @@ async def chat_with_video(payload: ChatPayload):
             {"question": payload.question},
             config={"configurable": {"session_id": payload.session_id}}
         )
+
+        # ✅ Log history after each chat
+        history = chatbot_manager.get_history(payload.session_id).messages
+        print(f"\n--- Chat History for session {payload.session_id} ---")
+        for msg in history:
+            role = "User" if isinstance(msg, HumanMessage) else "AI"
+            print(f"{role}: {msg.content}")
+        print("------------------------------------------------\n")
+
         return {"answer": response["answer"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred during chat: {str(e)}")
