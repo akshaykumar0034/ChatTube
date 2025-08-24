@@ -82,7 +82,7 @@ async def load_video(request: Request):
 @app.post("/api/chat")
 async def chat_with_video(payload: ChatPayload):
     if payload.session_id not in active_sessions:
-        raise HTTPException(status_code=404, detail="Session not found. Please load a video first.")
+        return {"answer": "⚠️ Session not found. Please load a video first."}
     
     chatbot = active_sessions[payload.session_id]
     
@@ -94,12 +94,9 @@ async def chat_with_video(payload: ChatPayload):
 
         # ✅ Log history after each chat
         history = chatbot_manager.get_history(payload.session_id).messages
-        print(f"\n--- Chat History for session {payload.session_id} ---")
         for msg in history:
             role = "User" if isinstance(msg, HumanMessage) else "AI"
-            print(f"{role}: {msg.content}")
-        print("------------------------------------------------\n")
 
         return {"answer": response["answer"]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred during chat: {str(e)}")
+       return { "answer": "⚠️ Sorry, something went wrong while processing your question. Please try again."}
